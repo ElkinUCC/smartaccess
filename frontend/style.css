@@ -1,0 +1,17 @@
+body {
+    text-align: center;
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+}
+
+video {
+    width: 400px;
+    border-radius: 10px;
+    border: 2px solid #38bdf8;
+}
+button {
+    margin: 10px;
+    padding: 10px;
+    cursor: pointer;
+}

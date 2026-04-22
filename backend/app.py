@@ -1,136 +1,114 @@
+import cv2
+import base64
+import numpy as np
+import os
+
 from flask import Flask, request, jsonify
-from database.db import crear_tabla, insertar_usuario, obtener_usuarios
+from flask_cors import CORS
 from collections import deque
 
-app = Flask(__name__)
+from deepface import DeepFace
+
+from database.db import crear_tabla, insertar_usuario, obtener_usuarios
 
 # =========================
-# BASE DE DATOS INICIAL
+# APP INIT
 # =========================
+app = Flask(__name__)
+CORS(app)
+
 crear_tabla()
 
 # =========================
-# ESTRUCTURAS DE DATOS
+# MEMORIA
 # =========================
-
-# Lista en memoria
 usuarios_memoria = []
-
-# Cola de ingresos (FIFO)
 cola_ingresos = deque()
 
 # =========================
-# ÁRBOL BINARIO SIMPLE
+# UTILIDAD
 # =========================
-
-class Nodo:
-    def __init__(self, nombre):
-        self.nombre = nombre
-        self.izq = None
-        self.der = None
-
-
-raiz = None
-
-
-def insertar_arbol(raiz, nombre):
-    if raiz is None:
-        return Nodo(nombre)
-
-    if nombre < raiz.nombre:
-        raiz.izq = insertar_arbol(raiz.izq, nombre)
-    else:
-        raiz.der = insertar_arbol(raiz.der, nombre)
-
-    return raiz
-
-
-def buscar_arbol(raiz, nombre):
-    if raiz is None:
-        return False
-
-    if raiz.nombre == nombre:
-        return True
-
-    if nombre < raiz.nombre:
-        return buscar_arbol(raiz.izq, nombre)
-
-    return buscar_arbol(raiz.der, nombre)
-
+def decode_image(base64_img):
+    img_data = base64.b64decode(base64_img.split(",")[1])
+    np_arr = np.frombuffer(img_data, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    return img
 
 # =========================
-# RUTAS
+# HOME
 # =========================
-
 @app.route("/")
 def home():
     return "SmartAccess funcionando 🔥"
 
+# =========================
+# REGISTRO (ELKIN FIJO)
+# =========================
+@app.route("/usuarios", methods=["POST"])
+def crear_usuario():
+    data = request.json
+    imagen = data["imagen"]
 
-# 📋 Obtener usuarios desde BD
+    img = decode_image(imagen)
+
+    nombre = "Elkin"
+
+    ruta = f"backend/imagenes/{nombre}.jpg"
+    os.makedirs("backend/imagenes", exist_ok=True)
+    cv2.imwrite(ruta, img)
+
+    insertar_usuario(nombre)
+    usuarios_memoria.append(nombre)
+    cola_ingresos.append(nombre)
+
+    return jsonify({"mensaje": "Usuario Elkin registrado"})
+
+# =========================
+# RECONOCIMIENTO
+# =========================
+@app.route("/reconocer", methods=["POST"])
+def reconocer():
+    data = request.json
+    imagen = data["imagen"]
+
+    img = decode_image(imagen)
+
+    ruta = "backend/imagenes/Elkin.jpg"
+
+    try:
+        result = DeepFace.verify(img, ruta, enforce_detection=False)
+
+        if result["verified"]:
+            return jsonify({"mensaje": "Acceso permitido: Elkin 🔓"})
+    except:
+        pass
+
+    return jsonify({"mensaje": "Acceso denegado ❌"})
+
+# =========================
+# USUARIOS BD
+# =========================
 @app.route("/usuarios", methods=["GET"])
 def listar_usuarios():
     usuarios = obtener_usuarios()
 
-    lista = []
-    for u in usuarios:
-        lista.append({
-            "id": u[0],
-            "nombre": u[1]
-        })
+    return jsonify([
+        {"id": u[0], "nombre": u[1]} for u in usuarios
+    ])
 
-    return jsonify(lista)
-
-
-# ➕ Crear usuario
-@app.route("/usuarios", methods=["POST"])
-def crear_usuario():
-    global raiz
-
-    data = request.json
-    nombre = data.get("nombre")
-
-    # BD
-    insertar_usuario(nombre)
-
-    # Lista en memoria
-    usuarios_memoria.append(nombre)
-
-    # Cola de ingreso
-    cola_ingresos.append(nombre)
-
-    # Árbol
-    raiz = insertar_arbol(raiz, nombre)
-
-    return jsonify({"mensaje": "Usuario creado"})
-
-
-# 🧠 Ver memoria (lista)
+# =========================
+# MEMORIA
+# =========================
 @app.route("/memoria", methods=["GET"])
 def ver_memoria():
     return jsonify(usuarios_memoria)
 
-
-# ⏳ Ver cola
 @app.route("/cola", methods=["GET"])
 def ver_cola():
     return jsonify(list(cola_ingresos))
 
-
-# 🔍 Buscar en árbol
-@app.route("/buscar/<nombre>", methods=["GET"])
-def buscar(nombre):
-    encontrado = buscar_arbol(raiz, nombre)
-
-    return jsonify({
-        "nombre": nombre,
-        "encontrado": encontrado
-    })
-
-
 # =========================
-# EJECUCIÓN
+# RUN
 # =========================
-
 if __name__ == "__main__":
     app.run(debug=True)
