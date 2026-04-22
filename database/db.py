@@ -17,3 +17,23 @@ def crear_tabla():
 
     conn.commit()
     conn.close()
+
+def insertar_usuario(nombre):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("INSERT INTO usuarios (nombre) VALUES (?)", (nombre,))
+    
+    conn.commit()
+    conn.close()
+
+
+def obtener_usuarios():
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM usuarios")
+    usuarios = cursor.fetchall()
+
+    conn.close()
+    return usuarios
