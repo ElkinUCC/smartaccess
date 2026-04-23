@@ -1,18 +1,63 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SmartAccess Test</title>
+    <title>SmartAccess</title>
+
+    <style>
+        body {
+            background: url("https://images.unsplash.com/photo-1523050854058-8df90110c9f1");
+            background-size: cover;
+            color: black;
+            text-align: center;
+            font-family: Arial;
+        }
+
+        video {
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            background: #00c853;
+            color: black;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+
+        input {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 8px;
+            border: none;
+            display: none;
+        }
+
+        #resultado {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
 </head>
+
 <body>
 
 <h2>SmartAccess 🔐</h2>
 
 <video id="video" autoplay width="400"></video>
 
-<br><br>
+<br>
 
-<button onclick="registrar()">Registrar Elkin</button>
+<input type="text" id="nombre" placeholder="Escribe tu nombre">
+
+<br>
+
 <button onclick="reconocer()">Reconocer</button>
+<button onclick="registrar()">Registrar</button>
 
 <p id="resultado"></p>
 
@@ -22,14 +67,18 @@
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const resultado = document.getElementById("resultado");
+const inputNombre = document.getElementById("nombre");
 
-// cámara
+// 🎥 activar cámara
 navigator.mediaDevices.getUserMedia({ video: true })
 .then(stream => {
     video.srcObject = stream;
+})
+.catch(err => {
+    alert("No se pudo activar la cámara");
 });
 
-// capturar imagen
+// 📸 capturar imagen
 function capturar() {
     const ctx = canvas.getContext("2d");
     canvas.width = video.videoWidth;
@@ -38,21 +87,10 @@ function capturar() {
     return canvas.toDataURL("image/png");
 }
 
-// registrar
-function registrar() {
-    fetch("http://127.0.0.1:5000/usuarios", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            imagen: capturar()
-        })
-    })
-    .then(r => r.json())
-    .then(d => resultado.innerText = d.mensaje);
-}
-
-// reconocer
+// 🔍 reconocer primero
 function reconocer() {
+    resultado.innerText = "Procesando...";
+
     fetch("http://127.0.0.1:5000/reconocer", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -60,8 +98,49 @@ function reconocer() {
             imagen: capturar()
         })
     })
-    .then(r => r.json())
-    .then(d => resultado.innerText = d.mensaje);
+    .then(res => res.json())
+    .then(data => {
+        resultado.innerText = data.mensaje;
+
+        if (data.mensaje.includes("denegado")) {
+            inputNombre.style.display = "inline";
+        } else {
+            inputNombre.style.display = "none";
+        }
+    })
+    .catch(err => {
+        resultado.innerText = "Error en reconocimiento";
+    });
+}
+
+// ➕ registrar si no existe
+function registrar() {
+    const nombre = inputNombre.value;
+
+    if (!nombre) {
+        alert("Escribe tu nombre primero 😄");
+        return;
+    }
+
+    resultado.innerText = "Registrando...";
+
+    fetch("http://127.0.0.1:5000/usuarios", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            nombre: nombre,
+            imagen: capturar()
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        resultado.innerText = data.mensaje;
+        inputNombre.value = "";
+        inputNombre.style.display = "none";
+    })
+    .catch(err => {
+        resultado.innerText = "Error al registrar";
+    });
 }
 </script>
 

@@ -1,39 +1,33 @@
-import sqlite3
+import mysql.connector
 
 def conectar():
-    conn = sqlite3.connect("smartaccess.db")
-    return conn
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="micho1234",  
+        database="smartaccess"
+    )
 
-def crear_tabla():
-    conn = conectar()
-    cursor = conn.cursor()
+def insertar_usuario(nombre, imagen):
+    db = conectar()
+    cursor = db.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL
-        )
-    """)
+    sql = "INSERT INTO usuarios (nombre, imagen) VALUES (%s, %s)"
+    cursor.execute(sql, (nombre, imagen))
+    db.commit()
 
-    conn.commit()
-    conn.close()
-
-def insertar_usuario(nombre):
-    conn = conectar()
-    cursor = conn.cursor()
-
-    cursor.execute("INSERT INTO usuarios (nombre) VALUES (?)", (nombre,))
-    
-    conn.commit()
-    conn.close()
+    cursor.close()
+    db.close()
 
 
 def obtener_usuarios():
-    conn = conectar()
-    cursor = conn.cursor()
+    db = conectar()
+    cursor = db.cursor()
 
     cursor.execute("SELECT * FROM usuarios")
-    usuarios = cursor.fetchall()
+    datos = cursor.fetchall()
 
-    conn.close()
-    return usuarios
+    cursor.close()
+    db.close()
+
+    return datos

@@ -5,25 +5,15 @@ import os
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from collections import deque
 
 from deepface import DeepFace
-
-from database.db import crear_tabla, insertar_usuario, obtener_usuarios
+from database.db import insertar_usuario, obtener_usuarios
 
 # =========================
 # APP INIT
 # =========================
 app = Flask(__name__)
 CORS(app)
-
-crear_tabla()
-
-# =========================
-# MEMORIA
-# =========================
-usuarios_memoria = []
-cola_ingresos = deque()
 
 # =========================
 # UTILIDAD
@@ -42,70 +32,74 @@ def home():
     return "SmartAccess funcionando 🔥"
 
 # =========================
-# REGISTRO (ELKIN FIJO)
+# REGISTRAR USUARIO (MULTI)
 # =========================
 @app.route("/usuarios", methods=["POST"])
 def crear_usuario():
     data = request.json
-    imagen = data["imagen"]
+    nombre = data.get("nombre")
+    imagen = data.get("imagen")
+
+    if not nombre or not imagen:
+        return jsonify({"error": "Nombre e imagen requeridos"}), 400
 
     img = decode_image(imagen)
 
-    nombre = "Elkin"
-
-    ruta = f"backend/imagenes/{nombre}.jpg"
+    # crear carpeta si no existe
     os.makedirs("backend/imagenes", exist_ok=True)
+
+    # guardar imagen
+    ruta = f"backend/imagenes/{nombre}.jpg"
     cv2.imwrite(ruta, img)
 
-    insertar_usuario(nombre)
-    usuarios_memoria.append(nombre)
-    cola_ingresos.append(nombre)
+    # guardar en MySQL
+    insertar_usuario(nombre, ruta)
 
-    return jsonify({"mensaje": "Usuario Elkin registrado"})
+    return jsonify({"mensaje": f"Usuario {nombre} registrado correctamente"})
 
 # =========================
-# RECONOCIMIENTO
+# RECONOCIMIENTO MULTIUSUARIO
 # =========================
 @app.route("/reconocer", methods=["POST"])
 def reconocer():
     data = request.json
-    imagen = data["imagen"]
+    imagen = data.get("imagen")
+
+    if not imagen:
+        return jsonify({"error": "Imagen requerida"}), 400
 
     img = decode_image(imagen)
 
-    ruta = "backend/imagenes/Elkin.jpg"
+    usuarios = obtener_usuarios()
 
-    try:
-        result = DeepFace.verify(img, ruta, enforce_detection=False)
+    for u in usuarios:
+        nombre = u[1]
+        ruta = u[2]
 
-        if result["verified"]:
-            return jsonify({"mensaje": "Acceso permitido: Elkin 🔓"})
-    except:
-        pass
+        try:
+            result = DeepFace.verify(img, ruta, enforce_detection=False)
+
+            if result["verified"]:
+                return jsonify({
+                    "mensaje": f"Acceso permitido: {nombre} 🔓"
+                })
+
+        except:
+            continue
 
     return jsonify({"mensaje": "Acceso denegado ❌"})
 
 # =========================
-# USUARIOS BD
+# LISTAR USUARIOS (DEBUG)
 # =========================
 @app.route("/usuarios", methods=["GET"])
 def listar_usuarios():
     usuarios = obtener_usuarios()
 
     return jsonify([
-        {"id": u[0], "nombre": u[1]} for u in usuarios
+        {"id": u[0], "nombre": u[1], "imagen": u[2]}
+        for u in usuarios
     ])
-
-# =========================
-# MEMORIA
-# =========================
-@app.route("/memoria", methods=["GET"])
-def ver_memoria():
-    return jsonify(usuarios_memoria)
-
-@app.route("/cola", methods=["GET"])
-def ver_cola():
-    return jsonify(list(cola_ingresos))
 
 # =========================
 # RUN
