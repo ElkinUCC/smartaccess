@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <div class="container"></div>
+    <meta charset="UTF-8">
     <title>SmartAccess</title>
 
     <style>
-        
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -70,13 +69,8 @@
             border-radius: 8px;
         }
 
-        .ok {
-            color: #00e676;
-        }
-
-        .error {
-            color: #ff5252;
-        }
+        .ok { color: #00e676; }
+        .error { color: #ff5252; }
     </style>
 </head>
 
@@ -85,20 +79,27 @@
 <h2>SmartAccess 🔐</h2>
 
 <div class="container">
+
+    <!-- 🎥 Video de la cámara -->
     <video id="video" autoplay width="400"></video>
 
     <br>
 
+    <!-- 🧑 Input de nombre -->
     <input type="text" id="nombre" placeholder="Escribe tu nombre">
 
     <br>
 
+    <!-- 🎯 Botones -->
     <button onclick="reconocer()">🔍 Reconocer</button>
     <button onclick="registrar()">➕ Registrar</button>
 
+    <!-- 📢 Resultado -->
     <p id="resultado"></p>
+
 </div>
 
+<!-- 📸 Canvas oculto para capturar imagen -->
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
@@ -107,38 +108,60 @@ const canvas = document.getElementById("canvas");
 const resultado = document.getElementById("resultado");
 const inputNombre = document.getElementById("nombre");
 
-// 🎥 activar cámara
-navigator.mediaDevices.getUserMedia({ video: true })
-.then(stream => {
-    video.srcObject = stream;
-})
-.catch(err => {
-    alert("No se pudo activar la cámara");
-});
+// 🔥 URL base (mejor práctica)
+const API_URL = "http://127.0.0.1:5000";
 
-// 📸 capturar imagen
-function capturar() {
-    const ctx = canvas.getContext("2d");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-    return canvas.toDataURL("image/png");
+
+// =========================
+// 🎥 ACTIVAR CÁMARA
+// =========================
+async function iniciarCamara() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+    } catch (error) {
+        alert("No se pudo activar la cámara");
+        console.error(error);
+    }
 }
 
-// 🔍 reconocer
-function reconocer() {
+iniciarCamara();
+
+
+// =========================
+// 📸 CAPTURAR IMAGEN
+// =========================
+function capturar() {
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0);
+
+    // ⚡ comprimimos imagen (más liviana)
+    return canvas.toDataURL("image/jpeg", 0.7);
+}
+
+
+// =========================
+// 🔍 RECONOCER
+// =========================
+async function reconocer() {
     resultado.innerText = "Procesando...";
     resultado.className = "";
 
-    fetch("http://127.0.0.1:5000/reconocer", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            imagen: capturar()
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
+    try {
+        const res = await fetch(`${API_URL}/reconocer`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                imagen: capturar()
+            })
+        });
+
+        const data = await res.json();
+
         resultado.innerText = data.mensaje;
 
         if (data.mensaje.includes("permitido")) {
@@ -148,16 +171,20 @@ function reconocer() {
             resultado.className = "error";
             inputNombre.style.display = "inline";
         }
-    })
-    .catch(err => {
+
+    } catch (error) {
         resultado.innerText = "Error en reconocimiento";
         resultado.className = "error";
-    });
+        console.error(error);
+    }
 }
 
-// ➕ registrar
-function registrar() {
-    const nombre = inputNombre.value;
+
+// =========================
+// ➕ REGISTRAR
+// =========================
+async function registrar() {
+    const nombre = inputNombre.value.trim();
 
     if (!nombre) {
         alert("Escribe tu nombre primero 😄");
@@ -167,29 +194,31 @@ function registrar() {
     resultado.innerText = "Registrando...";
     resultado.className = "";
 
-    fetch("http://127.0.0.1:5000/usuarios", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            nombre: nombre,
-            imagen: capturar()
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
+    try {
+        const res = await fetch(`${API_URL}/usuarios`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                nombre: nombre,
+                imagen: capturar()
+            })
+        });
+
+        const data = await res.json();
+
         resultado.innerText = data.mensaje;
         resultado.className = "ok";
 
         inputNombre.value = "";
         inputNombre.style.display = "none";
-    })
-    .catch(err => {
+
+    } catch (error) {
         resultado.innerText = "Error al registrar";
         resultado.className = "error";
-    });
+        console.error(error);
+    }
 }
 </script>
-</div>
 
 </body>
 </html>
