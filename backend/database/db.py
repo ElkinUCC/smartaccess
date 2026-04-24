@@ -6,15 +6,13 @@ from datetime import datetime
 # 🔌 CONEXIÓN A LA BASE DE DATOS
 # =========================
 def conectar():
-    """
-    Crea y retorna una conexión a MySQL
-    """
     try:
         return mysql.connector.connect(
             host="localhost",
             user="root",
             password="micho1234",
-            database="smartaccess"
+            database="smartaccess",
+            auth_plugin="mysql_native_password"  # 🔥 clave
         )
     except Exception as e:
         print("Error conectando a la DB:", e)

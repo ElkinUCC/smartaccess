@@ -164,7 +164,7 @@ async function reconocer() {
 
         resultado.innerText = data.mensaje;
 
-        if (data.mensaje.includes("permitido")) {
+       if (data.mensaje.toLowerCase().includes("permitido")) {
             resultado.className = "ok";
             inputNombre.style.display = "none";
         } else {
