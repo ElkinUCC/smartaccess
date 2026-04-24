@@ -9,14 +9,11 @@ from flask_cors import CORS
 from deepface import DeepFace
 from database.db import insertar_usuario, obtener_usuarios
 
-# =========================
-# APP INIT
-# =========================
 app = Flask(__name__)
 CORS(app)
 
 # =========================
-# UTILIDAD
+# 🔧 DECODIFICAR IMAGEN
 # =========================
 def decode_image(base64_img):
     img_data = base64.b64decode(base64_img.split(",")[1])
@@ -24,15 +21,17 @@ def decode_image(base64_img):
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     return img
 
+
 # =========================
-# HOME
+# 🏠 HOME
 # =========================
 @app.route("/")
 def home():
     return "SmartAccess funcionando 🔥"
 
+
 # =========================
-# REGISTRAR USUARIO (MULTI)
+# ➕ REGISTRO (1 IMAGEN)
 # =========================
 @app.route("/usuarios", methods=["POST"])
 def crear_usuario():
@@ -43,22 +42,28 @@ def crear_usuario():
     if not nombre or not imagen:
         return jsonify({"error": "Nombre e imagen requeridos"}), 400
 
+    # convertir imagen
     img = decode_image(imagen)
 
-    # crear carpeta si no existe
+    # 🔥 mejorar velocidad (reducir tamaño)
+    img = cv2.resize(img, (300, 300))
+
+    # carpeta
     os.makedirs("backend/imagenes", exist_ok=True)
 
-    # guardar imagen
     ruta = f"backend/imagenes/{nombre}.jpg"
     cv2.imwrite(ruta, img)
 
-    # guardar en MySQL
+    # guardar en DB
     insertar_usuario(nombre, ruta)
 
-    return jsonify({"mensaje": f"Usuario {nombre} registrado correctamente"})
+    return jsonify({
+        "mensaje": f"Usuario {nombre} registrado correctamente"
+    })
+
 
 # =========================
-# RECONOCIMIENTO MULTIUSUARIO
+# 🔍 RECONOCIMIENTO RÁPIDO
 # =========================
 @app.route("/reconocer", methods=["POST"])
 def reconocer():
@@ -70,27 +75,50 @@ def reconocer():
 
     img = decode_image(imagen)
 
+    # 🔥 reducir tamaño → más rápido
+    img = cv2.resize(img, (300, 300))
+
     usuarios = obtener_usuarios()
+
+    mejor_usuario = None
+    mejor_distancia = 1
 
     for u in usuarios:
         nombre = u[1]
         ruta = u[2]
 
         try:
-            result = DeepFace.verify(img, ruta, enforce_detection=False)
+            result = DeepFace.verify(
+                img,
+                ruta,
+                model_name="Facenet",   # ⚡ rápido
+                enforce_detection=True
+            )
 
-            if result["verified"]:
-                return jsonify({
-                    "mensaje": f"Acceso permitido: {nombre} 🔓"
-                })
+            distancia = result["distance"]
+
+            # quedarse con el mejor match
+            if distancia < mejor_distancia:
+                mejor_distancia = distancia
+                mejor_usuario = nombre
 
         except:
             continue
 
-    return jsonify({"mensaje": "Acceso denegado ❌"})
+    # 🎯 VALIDACIÓN (ajusta si quieres)
+    if mejor_usuario and mejor_distancia < 0.38:
+        return jsonify({
+            "mensaje": f"Acceso permitido: {mejor_usuario} 🔓",
+            "confianza": float(mejor_distancia)
+        })
+
+    return jsonify({
+        "mensaje": "Acceso denegado ❌"
+    })
+
 
 # =========================
-# LISTAR USUARIOS (DEBUG)
+# 📋 DEBUG
 # =========================
 @app.route("/usuarios", methods=["GET"])
 def listar_usuarios():
@@ -101,8 +129,9 @@ def listar_usuarios():
         for u in usuarios
     ])
 
+
 # =========================
-# RUN
+# ▶️ RUN
 # =========================
 if __name__ == "__main__":
     app.run(debug=True)
