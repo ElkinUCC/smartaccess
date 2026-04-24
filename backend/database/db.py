@@ -8,14 +8,18 @@ def conectar():
         database="smartaccess"
     )
 
+from datetime import datetime
+
 def insertar_usuario(nombre, imagen):
     db = conectar()
     cursor = db.cursor()
 
-    sql = "INSERT INTO usuarios (nombre, imagen) VALUES (%s, %s)"
-    cursor.execute(sql, (nombre, imagen))
-    db.commit()
+    fecha = datetime.now()
 
+    sql = "INSERT INTO usuarios (nombre, imagen, fecha_ingreso) VALUES (%s, %s, %s)"
+    cursor.execute(sql, (nombre, imagen, fecha))
+
+    db.commit()
     cursor.close()
     db.close()
 
