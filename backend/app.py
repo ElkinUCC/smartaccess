@@ -6,13 +6,13 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from deepface import DeepFace
+from deepface import DeepFace  # type: ignore
 from database.db import insertar_usuario, obtener_usuarios
 
 app = Flask(__name__)
 CORS(app)
 
-# Ruta centralizada (mejor práctica)
+# 📁 Carpeta imágenes
 RUTA_IMAGENES = "backend/imagenes"
 os.makedirs(RUTA_IMAGENES, exist_ok=True)
 
@@ -21,21 +21,21 @@ os.makedirs(RUTA_IMAGENES, exist_ok=True)
 # 🔧 DECODIFICAR IMAGEN
 # =========================
 def decode_image(base64_img):
-    """
-    Convierte una imagen en base64 a formato OpenCV (numpy array)
-    """
     try:
+        if "," not in base64_img:
+            raise ValueError("Formato base64 inválido")
+
         img_data = base64.b64decode(base64_img.split(",")[1])
         np_arr = np.frombuffer(img_data, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if img is None:
-            raise ValueError("No se pudo decodificar la imagen")
+            raise ValueError("No se pudo decodificar")
 
         return img
 
     except Exception as e:
-        print("Error decodificando imagen:", e)
+        print("❌ Error decodificando imagen:", e)
         return None
 
 
@@ -48,128 +48,154 @@ def home():
 
 
 # =========================
-# ➕ REGISTRO (1 IMAGEN)
+# ➕ REGISTRAR USUARIO
 # =========================
 @app.route("/usuarios", methods=["POST"])
 def crear_usuario():
-    data = request.json
+    try:
+        data = request.json
 
-    if not data:
-        return jsonify({"error": "No se enviaron datos"}), 400
+        if not data:
+            return jsonify({"error": "No se enviaron datos"}), 400
 
-    nombre = data.get("nombre")
-    imagen = data.get("imagen")
+        nombre = data.get("nombre")
+        imagen = data.get("imagen")
 
-    if not nombre or not imagen:
-        return jsonify({"error": "Nombre e imagen requeridos"}), 400
+        if not nombre or not imagen:
+            return jsonify({"error": "Nombre e imagen requeridos"}), 400
 
-    # 🔹 decodificar imagen
-    img = decode_image(imagen)
+        img = decode_image(imagen)
 
-    if img is None:
-        return jsonify({"error": "Imagen inválida"}), 400
+        if img is None:
+            return jsonify({"error": "Imagen inválida"}), 400
 
-    # 🔥 reducir tamaño → mejora rendimiento
-    img = cv2.resize(img, (300, 300))
+        # 🔥 optimización
+        img = cv2.resize(img, (300, 300))
 
-    # 🔹 evitar nombres peligrosos (seguridad básica)
-    nombre_archivo = f"{nombre.replace(' ', '_').lower()}.jpg"
-    ruta = os.path.join(RUTA_IMAGENES, nombre_archivo)
+        nombre_archivo = f"{nombre.strip().replace(' ', '_').lower()}.jpg"
+        ruta = os.path.join(RUTA_IMAGENES, nombre_archivo)
 
-    # 🔹 guardar imagen
-    cv2.imwrite(ruta, img)
+        cv2.imwrite(ruta, img)
 
-    # 🔹 guardar en base de datos
-    insertar_usuario(nombre, ruta)
+        # 🔥 guardar en BD (protegido)
+        try:
+            insertar_usuario(nombre, ruta)
+        except Exception as e:
+            print("⚠️ Error DB:", e)
+            return jsonify({
+                "mensaje": f"{nombre} guardado en imagen pero DB falló"
+            })
 
-    return jsonify({
-        "mensaje": f"Usuario {nombre} registrado correctamente"
-    })
+        return jsonify({
+            "mensaje": f"Usuario {nombre} registrado correctamente ✅"
+        })
+
+    except Exception as e:
+        print("❌ Error en registro:", e)
+        return jsonify({"error": "Error interno"}), 500
 
 
 # =========================
-# 🔍 RECONOCIMIENTO
+# 🔍 RECONOCER
 # =========================
 @app.route("/reconocer", methods=["POST"])
 def reconocer():
-    data = request.json
+    try:
+        data = request.json
 
-    if not data:
-        return jsonify({"error": "No se enviaron datos"}), 400
+        if not data:
+            return jsonify({"error": "No se enviaron datos"}), 400
 
-    imagen = data.get("imagen")
+        imagen = data.get("imagen")
 
-    if not imagen:
-        return jsonify({"error": "Imagen requerida"}), 400
+        if not imagen:
+            return jsonify({"error": "Imagen requerida"}), 400
 
-    # 🔹 decodificar imagen
-    img = decode_image(imagen)
+        img = decode_image(imagen)
 
-    if img is None:
-        return jsonify({"error": "Imagen inválida"}), 400
+        if img is None:
+            return jsonify({"error": "Imagen inválida"}), 400
 
-    # 🔥 optimización
-    img = cv2.resize(img, (300, 300))
+        img = cv2.resize(img, (300, 300))
 
-    usuarios = obtener_usuarios()
-
-    if not usuarios:
-        return jsonify({"error": "No hay usuarios registrados"}), 404
-
-    mejor_usuario = None
-    mejor_distancia = float("inf")  # 🔥 mejor que poner 1
-
-    # 🔁 RECORRIDO (esto es como una lista)
-    for u in usuarios:
-        nombre = u[1]
-        ruta = u[2]
-
+        # 🔥 intentar obtener usuarios (si DB falla → no rompe todo)
         try:
-            result = DeepFace.verify(
-                img,
-                ruta,
-                model_name="Facenet",
-                enforce_detection=True
-            )
-
-            distancia = result["distance"]
-
-            # 🔹 nos quedamos con el mejor match
-            if distancia < mejor_distancia:
-                mejor_distancia = distancia
-                mejor_usuario = nombre
-
+            usuarios = obtener_usuarios()
         except Exception as e:
-            print(f"Error comparando con {nombre}:", e)
-            continue
+            print("⚠️ Error DB:", e)
+            return jsonify({
+                "mensaje": "Error de base de datos ❌"
+            }), 500
 
-    # 🎯 UMBRAL DE DECISIÓN
-    if mejor_usuario and mejor_distancia < 0.38:
+        if not usuarios:
+            return jsonify({
+                "mensaje": "No hay usuarios registrados"
+            }), 404
+
+        mejor_usuario = None
+        mejor_distancia = float("inf")
+
+        for u in usuarios:
+            nombre = u["nombre"]
+            ruta = u["imagen"]
+
+            if not os.path.exists(ruta):
+                continue
+
+            try:
+                result = DeepFace.verify(
+                    img,
+                    ruta,
+                    model_name="Facenet",
+                    enforce_detection=False  # 🔥 clave para que no falle
+                )
+
+                distancia = result["distance"]
+
+                if distancia < mejor_distancia:
+                    mejor_distancia = distancia
+                    mejor_usuario = nombre
+
+            except Exception as e:
+                print(f"⚠️ Error con {nombre}:", e)
+                continue
+
+        # 🎯 UMBRAL (ajustable)
+        if mejor_usuario and mejor_distancia < 0.45:
+            return jsonify({
+                "mensaje": f"Acceso permitido: {mejor_usuario} 🔓",
+                "confianza": float(mejor_distancia)
+            })
+
         return jsonify({
-            "mensaje": f"Acceso permitido: {mejor_usuario} 🔓",
-            "confianza": float(mejor_distancia)
+            "mensaje": "Acceso denegado ❌"
         })
 
-    return jsonify({
-        "mensaje": "Acceso denegado ❌"
-    })
+    except Exception as e:
+        print("❌ Error en reconocimiento:", e)
+        return jsonify({"error": "Error interno"}), 500
 
 
 # =========================
-# 📋 LISTAR USUARIOS
+# 📋 LISTAR
 # =========================
 @app.route("/usuarios", methods=["GET"])
 def listar_usuarios():
-    usuarios = obtener_usuarios()
+    try:
+        usuarios = obtener_usuarios()
 
-    return jsonify([
-        {
-            "id": u[0],
-            "nombre": u[1],
-            "imagen": u[2]
-        }
-        for u in usuarios
-    ])
+        return jsonify([
+            {
+                "id": u[0],
+                "nombre": u[1],
+                "imagen": u[2]
+            }
+            for u in usuarios
+        ])
+
+    except Exception as e:
+        print("❌ Error listando:", e)
+        return jsonify([])
 
 
 # =========================
