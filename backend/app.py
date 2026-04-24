@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from deepface import DeepFace
+from deepface import DeepFace # type: ignore
 from database.db import insertar_usuario, obtener_usuarios
 
 app = Flask(__name__)
