@@ -80,26 +80,21 @@
 
 <div class="container">
 
-    <!-- 🎥 Video de la cámara -->
     <video id="video" autoplay width="400"></video>
 
     <br>
 
-    <!-- 🧑 Input de nombre -->
     <input type="text" id="nombre" placeholder="Escribe tu nombre">
 
     <br>
 
-    <!-- 🎯 Botones -->
     <button onclick="reconocer()">🔍 Reconocer</button>
     <button onclick="registrar()">➕ Registrar</button>
 
-    <!-- 📢 Resultado -->
     <p id="resultado"></p>
 
 </div>
 
-<!-- 📸 Canvas oculto para capturar imagen -->
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
@@ -108,13 +103,10 @@ const canvas = document.getElementById("canvas");
 const resultado = document.getElementById("resultado");
 const inputNombre = document.getElementById("nombre");
 
-// 🔥 URL base (mejor práctica)
 const API_URL = "http://127.0.0.1:5000";
 
 
-// =========================
-// 🎥 ACTIVAR CÁMARA
-// =========================
+// 🎥 CÁMARA
 async function iniciarCamara() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -124,13 +116,10 @@ async function iniciarCamara() {
         console.error(error);
     }
 }
-
 iniciarCamara();
 
 
-// =========================
-// 📸 CAPTURAR IMAGEN
-// =========================
+// 📸 CAPTURA
 function capturar() {
     const ctx = canvas.getContext("2d");
 
@@ -139,14 +128,11 @@ function capturar() {
 
     ctx.drawImage(video, 0, 0);
 
-    // ⚡ comprimimos imagen (más liviana)
     return canvas.toDataURL("image/jpeg", 0.7);
 }
 
 
-// =========================
-// 🔍 RECONOCER
-// =========================
+// 🔍 RECONOCER (AQUÍ ESTÁ EL CAMBIO 🔥)
 async function reconocer() {
     resultado.innerText = "Procesando...";
     resultado.className = "";
@@ -162,9 +148,14 @@ async function reconocer() {
 
         const data = await res.json();
 
+        // 🔥 MENSAJE + CONFIANZA
         resultado.innerText = data.mensaje;
 
-       if (data.mensaje.toLowerCase().includes("permitido")) {
+        if (data.confianza !== undefined) {
+            resultado.innerText += ` (score: ${data.confianza.toFixed(3)})`;
+        }
+
+        if (data.mensaje.toLowerCase().includes("permitido")) {
             resultado.className = "ok";
             inputNombre.style.display = "none";
         } else {
@@ -180,9 +171,7 @@ async function reconocer() {
 }
 
 
-// =========================
 // ➕ REGISTRAR
-// =========================
 async function registrar() {
     const nombre = inputNombre.value.trim();
 

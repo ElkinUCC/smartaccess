@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 from deepface import DeepFace # type: ignore
-from database.db import insertar_usuario, obtener_usuarios
+from database.db import insertar_usuario, obtener_usuarios, insertar_log
 
 app = Flask(__name__)
 CORS(app)
@@ -87,10 +87,12 @@ def reconocer():
 
     mejor_usuario = None
     mejor_distancia = 1
+    mejor_id = None
 
     for u in usuarios:
         nombre = u["nombre"]
         ruta = u["imagen"]
+        user_id = u["id"]
 
         if not os.path.exists(ruta):
             print("⚠️ Imagen no encontrada:", ruta)
@@ -106,21 +108,27 @@ def reconocer():
 
             distancia = result["distance"]
 
-            print(f"Comparando con {nombre} → {distancia}")
+            print(f"{nombre} → {distancia}")
 
             if distancia < mejor_distancia:
                 mejor_distancia = distancia
                 mejor_usuario = nombre
+                mejor_id = user_id
 
         except Exception as e:
             print("Error:", e)
 
-    # 🔥 UMBRAL MÁS RELAJADO
+    # ✅ ACCESO PERMITIDO
     if mejor_usuario and mejor_distancia < 0.6:
+        insertar_log(mejor_id, "exitoso")
+
         return jsonify({
             "mensaje": f"Acceso permitido: {mejor_usuario} 🔓",
             "confianza": float(mejor_distancia)
         })
+
+    # ❌ ACCESO DENEGADO
+    insertar_log(None, "fallido")
 
     return jsonify({"mensaje": "Acceso denegado ❌"})
 

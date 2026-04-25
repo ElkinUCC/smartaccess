@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 # =========================
-# 🔌 CONEXIÓN A LA BASE DE DATOS
+# 🔌 CONEXIÓN
 # =========================
 def conectar():
     try:
@@ -12,10 +12,10 @@ def conectar():
             user="root",
             password="micho1234",
             database="smartaccess",
-            auth_plugin="mysql_native_password"  # 🔥 clave
+            auth_plugin="mysql_native_password"
         )
     except Exception as e:
-        print("Error conectando a la DB:", e)
+        print("Error DB:", e)
         return None
 
 
@@ -23,34 +23,23 @@ def conectar():
 # ➕ INSERTAR USUARIO
 # =========================
 def insertar_usuario(nombre, imagen):
-    """
-    Inserta un nuevo usuario en la base de datos
-    """
     db = conectar()
-
     if db is None:
         return False
 
     try:
         cursor = db.cursor()
-
-        fecha = datetime.now()
-
         sql = """
         INSERT INTO usuarios (nombre, imagen, fecha_ingreso)
         VALUES (%s, %s, %s)
         """
-
-        # 🔒 evita SQL injection
-        cursor.execute(sql, (nombre, imagen, fecha))
-
+        cursor.execute(sql, (nombre, imagen, datetime.now()))
         db.commit()
-
         return True
 
     except Exception as e:
         print("Error insertando usuario:", e)
-        db.rollback()  # 🔥 importante si algo falla
+        db.rollback()
         return False
 
     finally:
@@ -62,22 +51,14 @@ def insertar_usuario(nombre, imagen):
 # 📋 OBTENER USUARIOS
 # =========================
 def obtener_usuarios():
-    """
-    Obtiene todos los usuarios registrados
-    """
     db = conectar()
-
     if db is None:
         return []
 
     try:
-        cursor = db.cursor(dictionary=True)  # 🔥 devuelve diccionarios
-
+        cursor = db.cursor(dictionary=True)
         cursor.execute("SELECT * FROM usuarios")
-
-        datos = cursor.fetchall()
-
-        return datos
+        return cursor.fetchall()
 
     except Exception as e:
         print("Error obteniendo usuarios:", e)
@@ -89,30 +70,27 @@ def obtener_usuarios():
 
 
 # =========================
-# 🔍 OBTENER USUARIO POR NOMBRE (EXTRA PRO)
+# 📝 INSERTAR LOG
 # =========================
-def obtener_usuario_por_nombre(nombre):
-    """
-    Busca un usuario específico por nombre
-    """
+def insertar_log(usuario_id, resultado):
     db = conectar()
-
     if db is None:
-        return None
+        return False
 
     try:
-        cursor = db.cursor(dictionary=True)
-
-        sql = "SELECT * FROM usuarios WHERE nombre = %s"
-        cursor.execute(sql, (nombre,))
-
-        usuario = cursor.fetchone()
-
-        return usuario
+        cursor = db.cursor()
+        sql = """
+        INSERT INTO log_accesos (usuario_id, resultado)
+        VALUES (%s, %s)
+        """
+        cursor.execute(sql, (usuario_id, resultado))
+        db.commit()
+        return True
 
     except Exception as e:
-        print("Error buscando usuario:", e)
-        return None
+        print("Error insertando log:", e)
+        db.rollback()
+        return False
 
     finally:
         cursor.close()
