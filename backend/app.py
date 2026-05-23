@@ -9,6 +9,9 @@ from flask_cors import CORS
 from deepface import DeepFace # type: ignore
 from database.db import insertar_usuario, obtener_usuarios, insertar_log
 
+# 🟡 COLA
+from collections import deque
+
 app = Flask(__name__)
 CORS(app)
 
@@ -17,15 +20,21 @@ os.makedirs(RUTA_IMAGENES, exist_ok=True)
 
 
 # =========================
-# 🔧 DECODIFICAR IMAGEN
+# 🔧 DECODIFICAR IMAGEN (RECURSION)
 # =========================
-def decode_image(base64_img):
+def decode_image(base64_img, intento=0):
+    """
+    RECURSION:
+    Se reintenta decodificar la imagen hasta 2 veces si falla
+    """
     try:
         img_data = base64.b64decode(base64_img.split(",")[1])
         np_arr = np.frombuffer(img_data, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         return img
     except Exception as e:
+        if intento < 2:
+            return decode_image(base64_img, intento + 1)  # llamada recursiva
         print("❌ Error decodificando:", e)
         return None
 
@@ -56,7 +65,6 @@ def crear_usuario():
     if img is None:
         return jsonify({"error": "Imagen inválida"}), 400
 
-    # ❌ NO resize (clave)
     nombre_archivo = f"{nombre.lower().replace(' ', '_')}.jpg"
     ruta = os.path.join(RUTA_IMAGENES, nombre_archivo)
 
@@ -80,16 +88,37 @@ def reconocer():
     if img is None:
         return jsonify({"error": "Imagen inválida"}), 400
 
-    usuarios = obtener_usuarios()
+    # 📋 LISTA original desde BD
+    usuarios_lista = obtener_usuarios()
 
-    if not usuarios:
+    if not usuarios_lista:
         return jsonify({"mensaje": "No hay usuarios registrados"})
+
+    # 🟡 COLA (FIFO)
+    usuarios = deque(usuarios_lista)
+
+    # 🥞 PILA (LIFO)
+    pila_comparaciones = []
+
+    # 📋 LISTA adicional
+    distancias = []
+
+    # 🌳 ÁRBOL (diccionario jerárquico)
+    arbol_usuarios = {}
+
+    # 🔗 GRAFO (relaciones)
+    grafo = {}
 
     mejor_usuario = None
     mejor_distancia = 1
     mejor_id = None
 
-    for u in usuarios:
+    # =========================
+    # 🔄 PROCESAMIENTO (COLA)
+    # =========================
+    while usuarios:
+        u = usuarios.popleft()  # FIFO
+
         nombre = u["nombre"]
         ruta = u["imagen"]
         user_id = u["id"]
@@ -110,6 +139,24 @@ def reconocer():
 
             print(f"{nombre} → {distancia}")
 
+            # 📋 LISTA
+            distancias.append(distancia)
+
+            # 🥞 PILA
+            pila_comparaciones.append((nombre, distancia))
+
+            # 🌳 ÁRBOL
+            if nombre not in arbol_usuarios:
+                arbol_usuarios[nombre] = []
+            arbol_usuarios[nombre].append(distancia)
+
+            # 🔗 GRAFO
+            grafo[nombre] = {
+                "imagen": ruta,
+                "distancia": distancia
+            }
+
+            # 🔎 BÚSQUEDA DEL MÍNIMO
             if distancia < mejor_distancia:
                 mejor_distancia = distancia
                 mejor_usuario = nombre
@@ -118,7 +165,10 @@ def reconocer():
         except Exception as e:
             print("Error:", e)
 
-    # ✅ ACCESO PERMITIDO
+    # =========================
+    # RESULTADO FINAL
+    # =========================
+
     if mejor_usuario and mejor_distancia < 0.6:
         insertar_log(mejor_id, "exitoso")
 
@@ -127,19 +177,19 @@ def reconocer():
             "confianza": float(mejor_distancia)
         })
 
-    # ❌ ACCESO DENEGADO
     insertar_log(None, "fallido")
 
     return jsonify({"mensaje": "Acceso denegado ❌"})
 
 
 # =========================
-# 📋 LISTAR (CORREGIDO)
+# 📋 LISTAR
 # =========================
 @app.route("/usuarios", methods=["GET"])
 def listar_usuarios():
     usuarios = obtener_usuarios()
 
+    # 📋 LISTA POR COMPRENSIÓN
     return jsonify([
         {
             "id": u["id"],
