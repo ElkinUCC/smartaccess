@@ -24,7 +24,6 @@ os.makedirs(RUTA_IMAGENES, exist_ok=True)
 # =========================
 def decode_image(base64_img, intento=0):
     """
-    RECURSION:
     Se reintenta decodificar la imagen hasta 2 veces si falla
     """
     try:
